@@ -44,14 +44,6 @@ function plotPoint(position, size, color){
 function renderLoop(){
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     drawGrid(false);
-    ctx.strokeStyle = "rgb(255, 0, 0)";
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(0, 0);
-    for(let i = -10; i < 10; i+= 0.1){
-        ctx.lineTo(toViewportPosition({x: i, y: (i+3)*(i)*(i-3)}).x, toViewportPosition({x: i, y: 1/i}).y);
-    }
-    ctx.stroke();
     setTimeout(() => {
         renderLoop();
     }, 16);
