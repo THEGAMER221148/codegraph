@@ -41,6 +41,10 @@ function plotPoint(position, size, color){
     ctx.fillRect(pos.x-size, pos.y-size, size, size);
 }
 
+function drawGraphs(){
+    //TODO: make the graphs and plots render out here.
+}
+
 function renderLoop(){
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     drawGrid(false);
