@@ -41,13 +41,30 @@ function plotPoint(position, size, color){
     ctx.fillRect(pos.x-size, pos.y-size, size, size);
 }
 
+function simplifyMath(availableVariables){
+    
+}
+
 function drawGraphs(){
-    //TODO: make the graphs and plots render out here.
+    cells = document.getElementById("cells").childNodes;
+    variables = {};
+    cells.forEach(box => {
+        //put code to simplify math expressions here
+        if(box.value != undefined){
+            boxValue = box.value.replaceAll(" ", "");
+            if (boxValue.slice(0, 3) == "let") {
+                variables[boxValue[3]] = boxValue.slice(5);
+            } else if (boxValue.slice(0, 4) == "plot") {
+
+            }
+        }
+    })
 }
 
 function renderLoop(){
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     drawGrid(false);
+    drawGraphs();
     setTimeout(() => {
         renderLoop();
     }, 16);
@@ -93,3 +110,6 @@ canvas.addEventListener("wheel", (event) => {
         scale.x *= event.deltaY > 0? 1.5 : 2/3;
     }
 });
+window.addEventListener("keypress", event => {
+    drawGraphs();
+})
