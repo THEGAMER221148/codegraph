@@ -52,105 +52,122 @@ function plotPoint(position, size, color){
     ctx.fillRect(pos.x-size, pos.y-size, size, size);
 }
 
-function simplifyMath(expression, availableVariables){
-    let tries = 0; // make sure this is local
-    expression = String(expression);
+function simplifyMath(expr, vars = {}) {
+    // --- 1) tokenize
+    expr = String(expr).replace(/\s+/g, "");
+    const tokens = [];
+    for (let i = 0; i < expr.length;) {
+        const c = expr[i];
 
-    // if it's just a number, return it
-    if (/^[+-]?\d+(\.\d+)?$/.test(expression)) return Number(expression);
+        // number
+        if (/[0-9.]/.test(c)) {
+        let j = i, dot = 0;
+        while (j < expr.length && (/[0-9]/.test(expr[j]) || (expr[j] === '.' && !dot++))) j++;
+        tokens.push({ t: 'num', v: parseFloat(expr.slice(i, j)) });
+        i = j; continue;
+        }
 
-    // if it's just a single variable name, return its value
-    if (/^[A-Za-z_]\w*$/.test(expression) && expression in availableVariables) {
-        return Number(availableVariables[expression]);
+        // identifier (variable, allow multi-letter)
+        if (/[A-Za-z_]/.test(c)) {
+        let j = i + 1;
+        while (j < expr.length && /[A-Za-z0-9_]/.test(expr[j])) j++;
+        tokens.push({ t: 'var', v: expr.slice(i, j) });
+        i = j; continue;
+        }
+
+        // operators / parens
+        if ("+-*/^()".includes(c)) {
+        tokens.push({ t: 'op', v: c });
+        i++; continue;
+        }
+
+        throw new Error("Bad char: " + c);
     }
 
-    expression = "(" + expression.replaceAll(" ", "") + ")";
-    while (expression.includes(")") && tries < maxOperations) {
-        let currentSplit = expression.split(")")[0].split("(").at(-1);
-        const oldSplit = currentSplit;
-        // sub in the variables and multiply by coefficients
-        for (const key in availableVariables) {
-            const value = availableVariables[key];
-            currentSplit = currentSplit.replaceAll(
-                new RegExp(`(\\d*)${key}`, "g"),
-                (_, coeff) => (coeff ? Number(coeff) * value : value)
-            );
+    // --- 2) insert implicit * (core fix)
+    // Insert '*' between: ... ) ( ... | ... ) var/num ... | ... num/var ( ...
+    const withImp = [];
+    for (let k = 0; k < tokens.length; k++) {
+        const a = tokens[k];
+        const b = tokens[k + 1];
+        withImp.push(a);
+        if (!b) continue;
+
+        const aIsVal = (a.t === 'num') || (a.t === 'var') || (a.t === 'op' && a.v === ')');
+        const bIsVal = (b.t === 'num') || (b.t === 'var') || (b.t === 'op' && b.v === '(');
+
+        if (aIsVal && bIsVal) {
+        // e.g. ( ... )( ... ),   )(x,   x(x+1),   2x,   (x)2,   x(y), (x)y
+        withImp.push({ t: 'op', v: '*' });
         }
-        // do the actual simplifying
-
-        // exponentiation
-        while (currentSplit.includes("^") && tries < maxOperations){
-
-            const number1 = currentSplit.split("^")[0].match(/-?\d+(\.\d+)?(?=[^0-9]*$)/)[0];
-            const number2 = currentSplit.split("^")[1].match(/-?\d+(\.\d+)?/)[0];
-
-            currentSplit = currentSplit.replace(number1 + "^" + number2, String(Math.pow(Number(number1), Number(number2))));
-            tries ++;
-        }
-
-        // multiplication and division
-        while ((currentSplit.includes("*") || currentSplit.includes("/")) && tries < maxOperations) {
-
-            const multIndex = currentSplit.indexOf("*");
-            const divIndex = currentSplit.indexOf("/");
-
-            if (multIndex !== -1 && (divIndex === -1 || multIndex < divIndex) ) {
-                const number1 = currentSplit.split("*")[0].match(/-?\d+(\.\d+)?(?=[^0-9]*$)/)[0];
-                const number2 = currentSplit.split("*")[1].match(/-?\d+(\.\d+)?/)[0];
-
-                currentSplit = currentSplit.replace(number1 + "*" + number2, String(Number(number1) * Number(number2)));
-
-            } else if (divIndex !== -1) {
-                const number1 = currentSplit.split("/")[0].match(/-?\d+(\.\d+)?(?=[^0-9]*$)/)[0];
-                const number2 = currentSplit.split("/")[1].match(/-?\d+(\.\d+)?/)[0];
-
-                currentSplit = currentSplit.replace(number1 + "/" + number2, String(Number(number1) / Number(number2)));
-            }
-            tries ++;
-        }
-
-        //addition and subtraction
-        while ((currentSplit.includes("+") || currentSplit.includes("-")) && tries < maxOperations) {
-
-            const addIndex  = currentSplit.indexOf("+");
-            const subtIndex = currentSplit.indexOf("-", 1); // skip unary '-'
-
-            if (addIndex !== -1 && (subtIndex === -1 || addIndex < subtIndex) ) {
-                const left  = currentSplit.split("+")[0];
-                const right = currentSplit.split("+")[1];
-                const m1 = left.match(/-?\d+(?:\.\d+)?$/);
-                const m2 = right.match(/^-?\d+(?:\.\d+)?/);
-                if (m1 && m2) {
-                    currentSplit = currentSplit.replace(
-                        m1[0] + "+" + m2[0],
-                        String(Number(m1[0]) + Number(m2[0]))
-                    );
-                }
-            } else if (subtIndex !== -1) {
-                const number1 = currentSplit.split("-")[0].match(/-?\d+(\.\d+)?(?=[^0-9]*$)/)[0];
-                const number2 = currentSplit.split("-")[1].match(/-?\d+(\.\d+)?/)[0];
-
-                currentSplit = currentSplit.replace(number1 + "-" + number2, String(Number(number1) - Number(number2)));
-            }
-            tries ++;
-        }
-
-        //at the end:
-        const i = expression.indexOf(oldSplit);
-        const prev = i >= 2 ? expression[i - 2] : '';
-        if (/[0-9)]/.test(prev)) {
-            expression = expression.replace("(" + oldSplit + ")", "*" + currentSplit);
-        } else {
-            expression = expression.replace("(" + oldSplit + ")", currentSplit);
-        }
-        tries ++;
-    }
-    if (tries >= 128) {
-        throw Error;
     }
 
-    return parseFloat(expression);
+    // --- 3) shunting-yard with unary minus (u-)
+    const out = [], ops = [];
+    const prec = { 'u-':5, '^':4, '*':3, '/':3, '+':2, '-':2 };
+    const rightAssoc = new Set(['^','u-']);
+
+    const isUnaryMinusAt = (idx) => {
+        const tok = withImp[idx];
+        if (!(tok.t === 'op' && tok.v === '-')) return false;
+        if (idx === 0) return true;
+        const prev = withImp[idx - 1];
+        // unary if previous is an operator other than ')', or it's '('
+        return (prev.t === 'op' && prev.v !== ')');
+    };
+
+    for (let i = 0; i < withImp.length; i++) {
+        const t = withImp[i];
+        if (t.t === 'num' || t.t === 'var') { out.push(t); continue; }
+        if (t.t === 'op' && t.v === '(') { ops.push(t); continue; }
+        if (t.t === 'op' && t.v === ')') {
+        while (ops.length && ops[ops.length-1].v !== '(') out.push(ops.pop());
+        if (!ops.length) throw new Error("Mismatched )");
+        ops.pop(); continue;
+        }
+        if (t.t === 'op') {
+        const op = isUnaryMinusAt(i) ? 'u-' : t.v;
+        while (ops.length) {
+            const top = ops[ops.length-1].v;
+            if (top === '(') break;
+            if ((prec[top] > prec[op]) || (prec[top] === prec[op] && !rightAssoc.has(op))) {
+            out.push(ops.pop());
+            } else break;
+        }
+        ops.push({ t:'op', v: op });
+        }
+    }
+    while (ops.length) {
+        const o = ops.pop();
+        if (o.v === '(' || o.v === ')') throw new Error("Mismatched (");
+        out.push(o);
+    }
+
+    // --- 4) evaluate RPN
+    const stk = [];
+    for (const t of out) {
+        if (t.t === 'num') { stk.push(t.v); continue; }
+        if (t.t === 'var') {
+        const val = vars.hasOwnProperty(t.v) ? Number(vars[t.v]) : NaN;
+        stk.push(val);
+        continue;
+        }
+        if (t.v === 'u-') { const a = stk.pop(); stk.push(-a); continue; }
+        const b = stk.pop(), a = stk.pop();
+        switch (t.v) {
+        case '+': stk.push(a + b); break;
+        case '-': stk.push(a - b); break;
+        case '*': stk.push(a * b); break;
+        case '/': stk.push(a / b); break;
+        case '^': stk.push(a ** b); break;
+        default: throw new Error("Bad op: " + t.v);
+        }
+    }
+    if (stk.length !== 1) throw new Error("Eval error");
+    return stk[0];
 }
+
+
 
 function drawGraphs(){
     cells = document.getElementById("cells").childNodes;
