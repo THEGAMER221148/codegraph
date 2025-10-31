@@ -53,9 +53,18 @@ function plotPoint(position, size, color){
 }
 
 function simplifyMath(expression, availableVariables){
+    let tries = 0; // make sure this is local
+    expression = String(expression);
+
+    // if it's just a number, return it
+    if (/^[+-]?\d+(\.\d+)?$/.test(expression)) return Number(expression);
+
+    // if it's just a single variable name, return its value
+    if (/^[A-Za-z_]\w*$/.test(expression) && expression in availableVariables) {
+        return Number(availableVariables[expression]);
+    }
+
     expression = "(" + expression.replaceAll(" ", "") + ")";
-    // simplify the parentheses in order
-    let tries = 0;
     while (expression.includes(")") && tries < maxOperations) {
         let currentSplit = expression.split(")")[0].split("(").at(-1);
         const oldSplit = currentSplit;
@@ -75,7 +84,7 @@ function simplifyMath(expression, availableVariables){
             const number1 = currentSplit.split("^")[0].match(/-?\d+(\.\d+)?(?=[^0-9]*$)/)[0];
             const number2 = currentSplit.split("^")[1].match(/-?\d+(\.\d+)?/)[0];
 
-            currentSplit = currentSplit.replace(number1 + "^" + number2, String(Number(number1) ** Number(number2)));
+            currentSplit = currentSplit.replace(number1 + "^" + number2, String(Math.pow(Number(number1), Number(number2))));
             tries ++;
         }
 
@@ -103,15 +112,20 @@ function simplifyMath(expression, availableVariables){
         //addition and subtraction
         while ((currentSplit.includes("+") || currentSplit.includes("-")) && tries < maxOperations) {
 
-            const addIndex = currentSplit.indexOf("+");
-            const subtIndex = currentSplit.indexOf("-");
+            const addIndex  = currentSplit.indexOf("+");
+            const subtIndex = currentSplit.indexOf("-", 1); // skip unary '-'
 
             if (addIndex !== -1 && (subtIndex === -1 || addIndex < subtIndex) ) {
-                const number1 = currentSplit.split("+")[0].match(/-?\d+(\.\d+)?(?=[^0-9]*$)/)[0];
-                const number2 = currentSplit.split("+")[1].match(/-?\d+(\.\d+)?/)[0];
-
-                currentSplit = currentSplit.replace(number1 + "+" + number2, String(Number(number1) + Number(number2)));
-
+                const left  = currentSplit.split("+")[0];
+                const right = currentSplit.split("+")[1];
+                const m1 = left.match(/-?\d+(?:\.\d+)?$/);
+                const m2 = right.match(/^-?\d+(?:\.\d+)?/);
+                if (m1 && m2) {
+                    currentSplit = currentSplit.replace(
+                        m1[0] + "+" + m2[0],
+                        String(Number(m1[0]) + Number(m2[0]))
+                    );
+                }
             } else if (subtIndex !== -1) {
                 const number1 = currentSplit.split("-")[0].match(/-?\d+(\.\d+)?(?=[^0-9]*$)/)[0];
                 const number2 = currentSplit.split("-")[1].match(/-?\d+(\.\d+)?/)[0];
@@ -123,11 +137,11 @@ function simplifyMath(expression, availableVariables){
 
         //at the end:
         const i = expression.indexOf(oldSplit);
-        const prev = i > 1 ? expression[i - 2] : '';
+        const prev = i >= 2 ? expression[i - 2] : '';
         if (/[0-9)]/.test(prev)) {
-        expression = expression.replace("(" + oldSplit + ")", "*" + currentSplit);
+            expression = expression.replace("(" + oldSplit + ")", "*" + currentSplit);
         } else {
-        expression = expression.replace("(" + oldSplit + ")", currentSplit);
+            expression = expression.replace("(" + oldSplit + ")", currentSplit);
         }
         tries ++;
     }
@@ -195,16 +209,12 @@ renderLoop();
 let isDragging = false;
 let lastMousePos = { x: 0, y: 0 };
 
-window.addEventListener("mousedown", (event) => {
+canvas.addEventListener("mousedown", (event) => {
     isDragging = true;
     lastMousePos.x = event.clientX;
     lastMousePos.y = event.clientY;
 });
 canvas.addEventListener("mouseup", () => {
-  isDragging = false;
-});
-
-canvas.addEventListener("mouseleave", () => {
   isDragging = false;
 });
 
